@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Totito · X y O</title>
+<style>
+  * { box-sizing: border-box; }
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+  body {
+    margin: 0; min-height: 100svh; display: grid; place-items: center;
+    padding: 28px 18px; color: #eef0fa;
+    background: radial-gradient(ellipse at 15% 15%, #25204b, transparent 55%),
+                radial-gradient(ellipse at 90% 90%, #123d42, transparent 50%), #10121e;
+  }
+  main { width: min(100%, 430px); text-align: center; }
+  .badge {
+    display: inline-block; font-size: 11px; letter-spacing: 3px;
+    color: #aba6d8; border: 1px solid #ffffff20; border-radius: 30px;
+    padding: 8px 15px;
+  }
+  h1 { margin: 15px 0 4px; font-size: 56px; letter-spacing: -3px; }
+  .subtitle { margin: 0 0 28px; color: #9da4bd; font-size: 14px; }
+  .scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .score {
+    padding: 15px 6px; border-radius: 16px;
+    background: #ffffff06; border: 1px solid #ffffff12;
+  }
+  .score span { display: block; font-size: 11px; letter-spacing: 1px; }
+  .score strong { display: block; margin-top: 5px; font-size: 28px; }
+  .x { color: #a99aff; }
+  .o { color: #68e5ce; }
+  .draw { color: #aab2c8; }
+  #status { min-height: 28px; margin: 23px 0 15px; font-weight: 600; }
+  #board {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    padding: 12px; border-radius: 24px; background: #ffffff05;
+    border: 1px solid #ffffff12;
+  }
+  .cell {
+    aspect-ratio: 1; border: 1px solid #ffffff12; border-radius: 15px;
+    background: #ffffff05; font: 700 clamp(38px, 12vw, 64px) system-ui;
+    cursor: pointer; transition: background .18s, transform .18s, border-color .18s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cell:not(:disabled):hover {
+    background: #ffffff0d; border-color: #a99aff88; transform: translateY(-2px);
+  }
+  .cell:disabled { cursor: default; opacity: 1; }
+  .cell.win { background: #ffffff12; border-color: currentColor; }
+  button:focus-visible { outline: 3px solid #e0d9ff; outline-offset: 4px; }
+  .actions { display: grid; gap: 12px; margin-top: 22px; }
+  #next {
+    padding: 15px; border: 0; border-radius: 13px; background: #b7a9ff;
+    color: #211a3b; font: 700 15px system-ui; cursor: pointer;
+  }
+  #next:hover { background: #c9bfff; }
+  #reset {
+    justify-self: center; border: 0; background: none;
+    color: #aab2c8; padding: 8px; font: 13px system-ui; cursor: pointer;
+  }
+  footer { margin-top: 22px; font-size: 12px; color: #858da5; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="badge">EL CLÁSICO DE SIEMPRE</div>
+  <h1>totito<span class="o">.</span></h1>
+  <p class="subtitle">Dos jugadores. Tres en línea. Una victoria.</p>
+
+  <section class="scores" aria-label="Marcador">
+    <div class="score x"><span>JUGADOR X</span><strong id="scoreX">0</strong></div>
+    <div class="score draw"><span>EMPATES</span><strong id="scoreDraw">0</strong></div>
+    <div class="score o"><span>JUGADOR O</span><strong id="scoreO">0</strong></div>
+  </section>
+
+  <p id="status" role="status" aria-live="polite"></p>
+  <div id="board" role="group" aria-label="Tablero de totito"></div>
+
+  <div class="actions">
+    <button id="next" type="button">Nueva ronda ↗</button>
+    <button id="reset" type="button">Reiniciar marcador</button>
+  </div>
+  <footer>Jueguen por turnos en el mismo dispositivo.</footer>
+</main>
+
+<script>
+(() => {
+  const lines = [
+    [0,1,2], [3,4,5], [6,7,8],
+    [0,3,6], [1,4,7], [2,5,8],
+    [0,4,8], [2,4,6]
+  ];
+  const boardElement = document.getElementById('board');
+  const status = document.getElementById('status');
+  const scores = { X: 0, O: 0, Draw: 0 };
+  let board, turn, finished, starter = 'X';
+
+  const cells = Array.from({ length: 9 }, (_, i) => {
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'cell';
+    cell.addEventListener('click', () => play(i));
+    boardElement.appendChild(cell);
+    return cell;
+  });
+
+  function updateScores() {
+    for (const key of Object.keys(scores)) {
+      document.getElementById('score' + key).textContent = scores[key];
+    }
+  }
+
+  function announceTurn() {
+    status.textContent = `Turno del jugador ${turn}`;
+    status.className = turn.toLowerCase();
+  }
+
+  function newRound() {
+    board = Array(9).fill('');
+    turn = starter;
+    finished = false;
+    cells.forEach((cell, i) => {
+      cell.textContent = '';
+      cell.className = 'cell';
+      cell.disabled = false;
+      cell.setAttribute('aria-label', `Fila ${Math.floor(i / 3) + 1}, columna ${i % 3 + 1}, vacía`);
+    });
+    announceTurn();
+  }
+
+  function play(i) {
+    if (finished || board[i]) return;
+    board[i] = turn;
+    cells[i].textContent = turn;
+    cells[i].classList.add(turn.toLowerCase());
+    cells[i].disabled = true;
+    cells[i].setAttribute('aria-label',
+      `Fila ${Math.floor(i / 3) + 1}, columna ${i % 3 + 1}, ${turn}`);
+
+    const winningLine = lines.find(line => line.every(index => board[index] === turn));
+    if (winningLine) {
+      finished = true;
+      scores[turn]++;
+      winningLine.forEach(index => cells[index].classList.add('win'));
+      status.textContent = `¡El jugador ${turn} gana la ronda!`;
+    } else if (board.every(Boolean)) {
+      finished = true;
+      scores.Draw++;
+      status.textContent = '¡Empate! Una más para desempatar.';
+      status.className = 'draw';
+    } else {
+      turn = turn === 'X' ? 'O' : 'X';
+      announceTurn();
+    }
+
+    if (finished) {
+      cells.forEach(cell => cell.disabled = true);
+      starter = starter === 'X' ? 'O' : 'X';
+      updateScores();
+    }
+  }
+
+  document.getElementById('next').addEventListener('click', newRound);
+  document.getElementById('reset').addEventListener('click', () => {
+    scores.X = scores.O = scores.Draw = 0;
+    starter = 'X';
+    updateScores();
+    newRound();
+  });
+
+  newRound();
+})();
+</script>
+</body>
+</html>
